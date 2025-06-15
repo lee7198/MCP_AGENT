@@ -54,4 +54,3 @@ def init_agent_service(arg):
 
 if __name__ == "__main__":
     logger.log_event("system", "프로그램 시작")
-    print("init")

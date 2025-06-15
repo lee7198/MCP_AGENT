@@ -1,9 +1,6 @@
 import socketio
-import uuid
 import threading
 import time
-import os
-import json
 import platform
 from datetime import datetime
 from qwen3_mcp import init_agent_service
@@ -13,11 +10,6 @@ CLIENT_ID = "TEST"
 
 # 전역 로거 인스턴스 생성
 logger = Logger()
-
-
-def custom_print(message):
-    print(message)
-    logger.log_event("print", message)
 
 
 def get_system_info():
@@ -41,7 +33,7 @@ def send_ping():
             data = {"clientId": CLIENT_ID}
             sio.emit("client_ping", data)
         except Exception as e:
-            print(f"Error sending ping: {e}")
+            logger.log_event("error", f"Error sending ping: {e}")
             break
 
 
@@ -66,14 +58,12 @@ def force_ping():
 @sio.event
 def connect_error(data):
     error_msg = f"Connection error: {data}"
-    custom_print(error_msg)
     logger.log_event("error", error_msg)
 
 
 @sio.event
 def disconnect():
     disconnect_msg = "Disconnected from server"
-    custom_print(disconnect_msg)
     logger.log_event("system", disconnect_msg)
 
 
@@ -84,22 +74,29 @@ def receive_message(data):
         if not message:
             raise ValueError("Message is required")
 
-        custom_print("요청 : " + message)
         logger.log_event("request", message)
+
+        sender = data.get("from")
+        if not sender:
+            raise ValueError("Sender is required")
+
+        messageId = data.get("messageId")
+        if not messageId:
+            raise ValueError("Message ID is required")
+
+        print("💚 ", message, messageId)
 
         # ARGUMENT 값만 추출
         params = [item["ARGUMENT"] for item in data["arg"]]
         logger.log_event("parameters", str(params))
 
         # MCP Agent 초기화
-        custom_print("MCP Agent 초기화 중...")
-        logger.log_event("system", "MCP Agent 초기화 시작")
+        logger.log_event("system", "MCP Agent 초기화 중...")
         bot = init_agent_service(params)
         logger.log_event("system", "MCP Agent 초기화 완료")
 
         # MCP 요청으로 처리
         messages = [{"role": "user", "content": message}]
-        custom_print("AI 모델에 요청 전송 중...")
         logger.log_event("system", "AI 모델 요청 시작")
 
         last_content = ""
@@ -108,20 +105,24 @@ def receive_message(data):
                 response["content"] if isinstance(response, dict) else str(response)
             )
 
-        custom_print("AI 모델 응답 수신 완료")
-        logger.log_event("ai_response", last_content)
+        logger.log_event("system", "AI 모델 응답 수신 완료")
 
         # 로그 파일로 저장
         log_filepath = logger.save_log(message, last_content, params)
-        custom_print(f"요청과 응답이 저장되었습니다: {log_filepath}")
+        logger.log_event("system", f"요청과 응답이 저장되었습니다: {log_filepath}")
 
         sio.emit(
             "mcp_response",
-            {"clientId": CLIENT_ID, "response": "😛😛😛😛😛😛😛😛😛😛😛😛😛😛😛"},
+            {
+                "clientId": CLIENT_ID,
+                "response": last_content,
+                "to": sender,
+                "messageId": messageId,
+            },
         )
+
     except Exception as e:
         error_msg = f"Error processing received message: {e}"
-        custom_print(error_msg)
         logger.log_event("error", error_msg)
         sio.emit("mcp_error", {"clientId": CLIENT_ID, "error": str(e)})
 
@@ -129,14 +130,13 @@ def receive_message(data):
 def connect_to_server():
     while True:
         try:
-            custom_print("서버에 연결을 시도합니다...")
-            sio.connect("http://192.168.0.118:3001", wait_timeout=10)
+            logger.log_event("system", "서버에 연결을 시도합니다...")
+            sio.connect("http://192.168.0.118:3001", namespaces=["/"], wait_timeout=10)
             sio.wait()
         except Exception as e:
             error_msg = f"연결 실패: {e}"
-            custom_print(error_msg)
             logger.log_event("error", error_msg)
-            custom_print("5초 후 재연결을 시도합니다...")
+            logger.log_event("system", "5초 후 재연결을 시도합니다...")
             time.sleep(5)
 
 
