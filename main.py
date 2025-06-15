@@ -5,80 +5,19 @@ import time
 import os
 import json
 import platform
-import logging
 from datetime import datetime
 from qwen3_mcp import init_agent_service
+from logger import Logger
 
 CLIENT_ID = "TEST"
 
-# 소켓 통신 로깅 설정
-socket_logger = logging.getLogger("socket_client")
-socket_logger.setLevel(logging.INFO)
-socket_handler = logging.FileHandler(
-    f'log/socket_{datetime.now().strftime("%Y%m%d")}.log'
-)
-socket_handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
-socket_logger.addHandler(socket_handler)
+# 전역 로거 인스턴스 생성
+logger = Logger()
 
 
-class Logger:
-    def __init__(self):
-        self.events = []
-        self.log_dir = "log"
-        if not os.path.exists(self.log_dir):
-            os.makedirs(self.log_dir)
-
-    def log_event(self, event_type, content):
-        timestamp = datetime.now()
-        self.events.append(
-            {
-                "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
-                "type": event_type,
-                "content": content,
-            }
-        )
-        # 소켓 관련 이벤트는 socket_logger에 기록
-        if event_type in ["system", "error"] and (
-            "서버" in content or "연결" in content
-        ):
-            socket_logger.info(f"{event_type}: {content}")
-
-    def save_log(self, message, response_text, params):
-        now = datetime.now()
-        timestamp = now.strftime("%Y%m%d%H%M")
-        random_hash = str(uuid.uuid4())[:8]
-        filename = f"{timestamp}_{random_hash}.txt"
-        filepath = os.path.join(self.log_dir, filename)
-
-        log_data = {
-            "metadata": {
-                "client_id": CLIENT_ID,
-                "system_info": get_system_info(),
-                "timestamp": {
-                    "iso": now.isoformat(),
-                    "date": now.strftime("%Y-%m-%d"),
-                    "time": now.strftime("%H:%M:%S"),
-                    "timezone": time.tzname[0],
-                },
-            },
-            "request": {
-                "message": message,
-                "parameters": params,
-                "received_at": now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
-            },
-            "response": {
-                "content": response_text,
-                "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
-            },
-            "events": self.events,
-        }
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(log_data, f, ensure_ascii=False, indent=2)
-
-        return filepath
+def custom_print(message):
+    print(message)
+    logger.log_event("print", message)
 
 
 def get_system_info():
@@ -88,15 +27,6 @@ def get_system_info():
         "python_version": platform.python_version(),
         "machine": platform.machine(),
     }
-
-
-# 전역 로거 인스턴스 생성
-logger = Logger()
-
-
-def custom_print(message):
-    print(message)
-    logger.log_event("print", message)
 
 
 sio = socketio.Client(
@@ -123,7 +53,6 @@ def connect():
             "clientId": CLIENT_ID,
         },
     )
-    socket_logger.info("서버에 연결되었습니다.")
     logger.log_event("system", "서버에 연결되었습니다.")
     threading.Thread(target=send_ping, daemon=True).start()
 
@@ -137,7 +66,6 @@ def force_ping():
 @sio.event
 def connect_error(data):
     error_msg = f"Connection error: {data}"
-    socket_logger.error(error_msg)
     custom_print(error_msg)
     logger.log_event("error", error_msg)
 
@@ -145,7 +73,6 @@ def connect_error(data):
 @sio.event
 def disconnect():
     disconnect_msg = "Disconnected from server"
-    socket_logger.info(disconnect_msg)
     custom_print(disconnect_msg)
     logger.log_event("system", disconnect_msg)
 
@@ -162,7 +89,6 @@ def receive_message(data):
 
         # ARGUMENT 값만 추출
         params = [item["ARGUMENT"] for item in data["arg"]]
-        custom_print(f"😵 ARGS {params}")
         logger.log_event("parameters", str(params))
 
         # MCP Agent 초기화
@@ -176,20 +102,23 @@ def receive_message(data):
         custom_print("AI 모델에 요청 전송 중...")
         logger.log_event("system", "AI 모델 요청 시작")
 
-        response_text = ""
+        last_content = ""
         for response in bot.run(messages=messages):
-            response_text += str(response)
-            custom_print(f"AI 모델 응답 수신: {response}")
-            logger.log_event("ai_response", str(response))
+            last_content = (
+                response["content"] if isinstance(response, dict) else str(response)
+            )
 
-        custom_print("응답: " + response_text)
-        logger.log_event("response", response_text)
+        custom_print("AI 모델 응답 수신 완료")
+        logger.log_event("ai_response", last_content)
 
         # 로그 파일로 저장
-        log_filepath = logger.save_log(message, response_text, params)
+        log_filepath = logger.save_log(message, last_content, params)
         custom_print(f"요청과 응답이 저장되었습니다: {log_filepath}")
 
-        sio.emit("mcp_response", {"clientId": CLIENT_ID, "response": "response_text"})
+        sio.emit(
+            "mcp_response",
+            {"clientId": CLIENT_ID, "response": "😛😛😛😛😛😛😛😛😛😛😛😛😛😛😛"},
+        )
     except Exception as e:
         error_msg = f"Error processing received message: {e}"
         custom_print(error_msg)

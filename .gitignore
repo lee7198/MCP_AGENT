@@ -107,3 +107,6 @@ pyrightconfig.json
 
 # VS Code settings
 .vscode/
+
+
+log/*
