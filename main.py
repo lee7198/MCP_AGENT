@@ -79,8 +79,17 @@ def receive_message(data):
         sio.emit("mcp_error", {"clientId": CLIENT_ID, "error": str(e)})
 
 
-try:
-    sio.connect("http://localhost:3001", wait_timeout=10)
-    sio.wait()
-except Exception as e:
-    print(f"Connection failed: {e}")
+def connect_to_server():
+    while True:
+        try:
+            print("서버에 연결을 시도합니다...")
+            sio.connect("http://192.168.0.118:3001", wait_timeout=10)
+            sio.wait()
+        except Exception as e:
+            print(f"연결 실패: {e}")
+            print("5초 후 재연결을 시도합니다...")
+            time.sleep(5)
+
+
+if __name__ == "__main__":
+    connect_to_server()

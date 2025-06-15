@@ -8,7 +8,7 @@ from qwen_agent.gui import WebUI
 def init_agent_service(arg):
     llm_cfg = {
         "model": "qwen3:8b",
-        "model_server": "http://localhost:11434/v1",
+        "model_server": "http://192.168.0.118:11434/v1",
         "api_key": "ollama",
         "generate_cfg": {"top_p": 0.8},
     }
